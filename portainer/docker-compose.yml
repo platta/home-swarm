@@ -1,0 +1,60 @@
+#-------------------------------------------------------------------------------
+# Portainer Stack
+#-------------------------------------------------------------------------------
+# Portainer stack
+#-------------------------------------------------------------------------------
+version: "3.8"
+
+services:
+  #-----------------------------------------------------------------------------
+  # Portainer Server
+  # Hosts the Portainer UI.
+  portainer:
+    image: portainer/portainer-ce:latest
+
+    # You'll need to expose the port directly until you get NGINX deployed. Once
+    # NGINX is live, you should come back, comment this out, and redeploy the
+    # stack.
+    ports:
+      - "9000:9000"
+
+    volumes:
+      - data:/data
+
+    networks:
+      - net
+      - shared_net
+
+  #-----------------------------------------------------------------------------
+  # Portainer Agent
+  # Makes Docker information from each swarm node available to the Portainer
+  # server.
+  portainer_agent:
+    image: portainer/agent:latest
+
+    volumes:
+      # Grant access to the docker engine.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Grant access to docker volumes folder.
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+
+    networks:
+      - net
+
+    deploy:
+      # This container needs to be running on each node.
+      mode: global
+
+# If you are using a cluster with more than one node, you'll need to implement
+# a solution for distributed storage.
+volumes:
+  data:
+    driver: local
+
+networks:
+  net:
+    driver: overlay
+  # Placing a container on the shared network lets NGINX reverse proxy traffic
+  # to it.
+  shared_net:
+    external: true

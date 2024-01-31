@@ -18,10 +18,6 @@ a single node Docker Swarm with the following services:
 - Grafana (with Prometheus, Promtail, and Loki) to provide monitoring for your
   node(s) and services.
 
-Note - You can technically expand this setup to span multiple nodes. The service definitions in the stacks are designed to support that, but there is one caveat. Swarm doesn't manage storage in any way. That means if you're going to move to a multi-node swarm you're going to need to either introduce a SAN or some kind of
-local storage sync between your nodes. Otherwise, when services move from node
-to node their corresponding storage volumes won't follow them.
-
 ## Setup
 
 Each of the stacks you'll be standing up has its own folder in the repository
@@ -73,3 +69,56 @@ below.
 
 Once you have those stacks deployed, you have the foundation you need to deploy,
 expose, and monitor anything else you want!
+
+## Swarm Notes
+
+### On single node swarms
+
+Why are we creating a single node swarm? Isn't swarm for managing Docker
+clusters spanning multiple physical hosts? It is! But, running even a single
+node in swarm mode gives us a few extra tools that are super useful.
+
+#### Configs
+
+Configs are resources you define at the swarm level that can be injected into
+your services. They are a perfect way to get configuration files into your
+environment without having to create a volume. One thing to know about Configs
+is that they are read-only once created, so if you need to update something you
+have to create a new Config, update your stack to reference the new Config, and
+redeploy your stack.
+
+I like to use timestamps in the format `_YYYY-MM-DD_HHmm` at the end of all my
+Config names so I can easily sort through old ones (if I haven't deleted them).
+
+### Secrets
+
+Secrets are a lot like Configs, except they are for (you guessed it) secrets.
+Some stacks require you to specify a JWT key or other key value to secure data
+or communication. Secrets are read-only, just like Configs, but you cannot view
+their contents once created. You can inject a Secret into a service just like a
+Config, and it will appear as a file inside the container. Many services allow
+you to specify a file location as the source for secret values, and this is
+exactly how you can leverage that option.
+
+### On storage
+
+You can technically expand this setup to span multiple nodes. The service
+definitions in the stacks are designed to support that, but there is one caveat.
+Swarm doesn't manage storage in any way. That means if you're going to move to a
+multi-node swarm you're going to need to either introduce a SAN or some kind of
+local storage sync between your nodes. Otherwise, when services move from node
+to node their corresponding storage volumes won't follow them.
+
+This is part of the reason Configs and Secrets are great, because they _do_
+replicate across nodes.
+
+## Additional Notes
+
+- Swarm names services (and their DNS names) using the format `stack_service`,
+  so many of the pieces of the compose templates and configuration files are
+  dependent on using the containing folder name for each stack you deploy. You
+  can technically use any name you want, but you'll need to update all
+  references to those names.
+- In the same way, swarm will name other resources `stack_resource` as well.
+  This is why each stack creates a network called `net`. It just makes it easier
+  to read when looking at the list of networks in portainer.
