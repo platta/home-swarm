@@ -90,7 +90,7 @@ redeploy your stack.
 I like to use timestamps in the format `_YYYY-MM-DD_HHmm` at the end of all my
 Config names so I can easily sort through old ones (if I haven't deleted them).
 
-### Secrets
+#### Secrets
 
 Secrets are a lot like Configs, except they are for (you guessed it) secrets.
 Some stacks require you to specify a JWT key or other key value to secure data
