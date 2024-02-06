@@ -1,0 +1,72 @@
+server:
+  host: 0.0.0.0
+  port: 9091
+
+log:
+  level: debug
+
+ntp:
+  address: "pool 0.debian.pool.ntp.org"
+  version: 3
+  max_desync: 3s
+  disable_startup_check: false
+  disable_failure: false
+
+totp:
+  issuer: authelia.com
+
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+
+access_control:
+  default_policy: deny
+  rules:
+    # Allow with no authentication.
+    #- domain: subdomain.yoursite.com
+    #  policy: bypass
+
+    # Require login and two factor auth.
+    #- domain: subdomain.yoursite.com
+    #  policy: two_factor
+
+    # Only allow access to members of the group called admins.
+    #- domain: subdomain.yoursite.com
+    #  policy: two_factor
+    #  subject:
+    #    - 'group:admins'
+
+    # Always allow access to all ACME challenges.
+    - domain: '*'
+      resources:
+        - '^/.well-known/acme-challenge/.*$'
+      policy: bypass
+
+      # Always allow access to Authelia.
+    - domain: auth.yoursite.com
+      policy: bypass
+
+    # Add yours below.
+
+session:
+  name: authelia_session
+  expiration: 2w
+  inactivity: 2w
+  domain: yoursite.com
+
+  redis:
+    host: nginx_redis
+    port: 6379
+
+regulation:
+  max_retries: 3
+  find_time: 120
+  ban_time: 300
+
+storage:
+  local:
+    path: /data/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /data/notification.txt

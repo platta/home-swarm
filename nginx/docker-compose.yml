@@ -1,0 +1,165 @@
+#-------------------------------------------------------------------------------
+# NGINX Stack
+#-------------------------------------------------------------------------------
+version: "3.8"
+
+# Define Swarm Config names up top.
+x-nginx-conf: &nginx-conf nginx_nginx.conf_YYYY-MM-DD_HHmm
+x-nginx-snippets-auth: &nginx-snippets-auth nginx_nginx_snippets_auth.conf_YYYY-MM-DD_HHmm
+x-nginx-snippets-authelia: &nginx-snippets-authelia nginx_nginx_snippets_authelia.conf_YYYY-MM-DD_HHmm
+x-nginx-snippets-proxysettings: &nginx-snippets-proxysettings nginx_nginx_snippets_proxysettings.conf_YYYY-MM-DD_HHmm
+x-authelia-configuration: &authelia-configuration nginx_authelia_configuration.yml_YYYY-MM-DD_HHmm
+
+# Define Swarm Secret names up top.
+x-authelia-users-database: &authelia-users-database nginx_authelia_users_database.yml_YYYY-MM-DD_HHmm
+x-authelia-jwt-secret: &authelia-jwt-secret nginx_authelia_jwt_secret_YYYY-MM-DD_HHmm
+x-authelia-session-secret: &authelia-session-secret nginx_authelia_session_secret_YYYY-MM-DD_HHmm
+x-authelia-storage-encryption-key: &authelia-storage-encryption-key nginx_authelia_storage_encryption_key_YYYY-MM-DD_HHmm
+
+services:
+  #-----------------------------------------------------------------------------
+  # NGINX
+  # Reverse proxy, SSL termination, general point of ingress for all incoming
+  # traffic.
+  nginx:
+    image: nginx:latest
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+    configs:
+      # Inject configuration file.
+      - source: *nginx-conf
+        target: /etc/nginx/nginx.conf
+      # Inject snippets necessary for Authelia.
+      - source: *nginx-snippets-auth
+        target: /etc/nginx/snippets/auth.conf
+      - source: *nginx-snippets-authelia
+        target: /etc/nginx/snippets/authelia.conf
+      # Inject snippet for common proxy settings.
+      - source: *nginx-snippets-proxysettings
+        target: /etc/nginx/snippets/proxysettings.conf
+
+    volumes:
+      # Letsencrypt certificates are stored here when Certbot creates/updates
+      # them.
+      - letsencrypt_data:/etc/letsencrypt
+      # Certbot challenge responses are written here by Certbot, must be served
+      # to Letsencrypt by NGINX.
+      - certbot_data:/var/www/certbot
+
+    networks:
+      - net
+      - shared_net
+
+    extra_hosts:
+      # This is needed so the NGINX configuration files can reference localhost.
+      - host.docker.internal:host-gateway
+
+    # This is the only service in your entire system that should expose any
+    # ports for web browser traffic.
+    ports:
+      - "80:80"
+      - "443:443"
+
+    deploy:
+      update_config:
+        # When updating the service, stat the new container first, then wait 10
+        # seconds before killing the old one. Ensures continuity.
+        order: start-first
+        delay: 10s
+
+  #-----------------------------------------------------------------------------
+  # Certbot
+  # Creates and automatically renews SSL certificates with Letsencrypt.
+  certbot:
+    image: certbot/certbot:latest
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+    volumes:
+      # Certificates are written here to be used by NGINX.
+      - letsencrypt_data:/etc/letsencrypt
+      # Challenge responses are written here to be served by NGINX.
+      - certbot_data:/var/www/certbot
+
+    networks:
+      - net
+
+  #-----------------------------------------------------------------------------
+  # Authelia
+  # Authentication gateway, username and password plus MFA.
+  authelia:
+    image: authelia/authelia:latest
+
+    secrets:
+      - source: *authelia-users-database
+        target: /config/users_database.yml
+      - source: *authelia-jwt-secret
+        target: /secrets/jwt_secret
+      - source: *authelia-session-secret
+        target: /secrets/session_secret
+      - source: *authelia-storage-encryption-key
+        target: /secrets/storage_encryption_key
+
+    configs:
+      - source: *authelia-configuration
+        target: /config/configuration.yml
+
+    volumes:
+      - authelia_data:/data
+
+    environment:
+      AUTHELIA_JWT_SECRET_FILE: /secrets/jwt_secret
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session_secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage_encryption_key
+
+    networks:
+      - net
+
+  #-----------------------------------------------------------------------------
+  # Redis
+  # Distributed key/value store. Used by Authelia.
+  redis:
+    image: redis:latest
+
+    volumes:
+      - redis_data:/data
+
+    networks:
+      - net
+
+secrets:
+  *authelia-users-database :
+    external: true
+  *authelia-jwt-secret :
+    external: true
+  *authelia-session-secret :
+    external: true
+  *authelia-storage-encryption-key :
+    external: true
+
+configs:
+  *nginx-conf :
+    external: true
+  *nginx-snippets-auth :
+    external: true
+  *nginx-snippets-authelia :
+    external: true
+  *nginx-snippets-proxysettings :
+    external: true
+  *authelia-configuration :
+    external: true
+
+volumes:
+  letsencrypt_data:
+    driver: local
+  certbot_data:
+    driver: local
+  authelia_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  net:
+    driver: overlay
+  shared_net:
+    external: true
